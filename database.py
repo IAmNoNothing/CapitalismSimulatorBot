@@ -142,7 +142,15 @@ class Database:
         self.cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (deal[4] * amount, deal[1]))
 
         # give item to buyer
-        self.cursor.execute("UPDATE inventories SET amount = amount + ? WHERE user_id = ? AND item = ?", (amount, buyer_id, deal[2]))
+        self.cursor.execute(
+            "INSERT OR IGNORE INTO inventories (user_id, item, amount) VALUES (?, ?, 0)",
+            (buyer_id, deal[2])
+        )
+
+        self.cursor.execute(
+            "UPDATE inventories SET amount = amount + ? WHERE user_id = ? AND item = ?",
+            (amount, buyer_id, deal[2])
+        )
 
         # delete item from auction
         self.cursor.execute("UPDATE auction SET amount = amount - ? WHERE id = ?", (amount, auction_id))
@@ -166,3 +174,14 @@ class Database:
 
     def get_liquidity(self):
         return self.cursor.execute("SELECT SUM(balance), COUNT(*) FROM users").fetchone()
+
+    def send_money(self, sender_id, receiver_id, amount):
+        sender_balance = self.get_balance(sender_id)[0]
+
+        if sender_balance >= amount:
+            self.cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, sender_id))
+            self.cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, receiver_id))
+            self.conn.commit()
+            return True
+
+        return False
